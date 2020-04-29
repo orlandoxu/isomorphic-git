@@ -106,7 +106,10 @@ export async function mergeTree({
               theirName,
             })
           }
+
           // all other types of conflicts fail
+          // 不是这里出的错！！
+          // 但是有可能tree冲突的时候，还是可能走到这里
           throw new MergeNotSupportedError()
         }
       }

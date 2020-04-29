@@ -100,61 +100,67 @@ export async function _merge({
     throw new MergeNotSupportedError()
   }
   const baseOid = baseOids[0]
-  // handle fast-forward case
+  // case 1 无分支 fast-forward case
   if (baseOid === theirOid) {
     return {
       oid: ourOid,
       alreadyMerged: true,
     }
   }
+  // case 2 无分支 fast-forward case
   if (baseOid === ourOid) {
     if (!dryRun && !noUpdateBranch) {
-      await GitRefManager.writeRef({ fs, gitdir, ref: ours, value: theirOid })
+      await GitRefManager.writeRef({fs, gitdir, ref: ours, value: theirOid})
     }
     return {
       oid: theirOid,
       fastForward: true,
     }
-  } else {
-    // not a simple fast-forward
-    if (fastForwardOnly) {
-      throw new FastForwardError()
-    }
-    // try a fancier merge
-    const tree = await mergeTree({
-      fs,
-      gitdir,
-      ourOid,
-      theirOid,
-      baseOid,
-      ourName: ours,
-      baseName: 'base',
-      theirName: theirs,
-      dryRun,
-    })
-    if (!message) {
-      message = `Merge branch '${abbreviateRef(theirs)}' into ${abbreviateRef(
-        ours
-      )}`
-    }
-    const oid = await _commit({
-      fs,
-      cache,
-      gitdir,
-      message,
-      ref: ours,
-      tree,
-      parent: [ourOid, theirOid],
-      author,
-      committer,
-      signingKey,
-      dryRun,
-      noUpdateBranch,
-    })
-    return {
-      oid,
-      tree,
-      mergeCommit: true,
-    }
+  }
+
+  // case 3 需要合并分支
+  if (fastForwardOnly) {
+    throw new FastForwardError()
+  }
+
+  const tree = await mergeTree({
+    fs,
+    gitdir,
+    ourOid,
+    theirOid,
+    baseOid,
+    ourName: ours,
+    baseName: 'base',
+    theirName: theirs,
+    dryRun,
+  })
+
+  // TODO：这里可以考虑精简合并的注释
+  if (!message) {
+    message = `Merge branch '${abbreviateRef(theirs)}' into ${abbreviateRef(
+      ours
+    )}`
+  }
+
+  // TODO: 这里有点难受，他merge了之后会自动commit一次～～
+  // 暂时不知道是否对我们的应用场景有影响
+  const oid = await _commit({
+    fs,
+    cache,
+    gitdir,
+    message,
+    ref: ours,
+    tree,
+    parent: [ourOid, theirOid],
+    author,
+    committer,
+    signingKey,
+    dryRun,
+    noUpdateBranch,
+  })
+  return {
+    oid,
+    tree,
+    mergeCommit: true,
   }
 }
