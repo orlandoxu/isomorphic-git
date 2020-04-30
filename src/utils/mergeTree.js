@@ -10,10 +10,11 @@ import { _writeObject as writeObject } from '../storage/writeObject.js'
 import { basename } from './basename.js'
 import { join } from './join.js'
 import { mergeFile } from './mergeFile.js'
-import { mergeNoteMeta } from './mergeNoteMeta.js'
+import { mergeNoteMeta, mergeFolder, mergeNote } from './mergeNoteMeta.js'
 
 /**
- * Create a merged tree
+ * 只有两边都有提交的时候，才会走到mergeTree
+ * 否则的话，就走fast-forward了
  *
  * @param {Object} args
  * @param {import('../models/FileSystem.js').FileSystem} args.fs
@@ -87,7 +88,8 @@ export async function mergeTree({
         }
         case 'true-true': {
 
-          // Modifications
+          // 这里是文本冲突
+          // 暂时没有想到我们的应用中哪里会设计到tree冲突
           if ( ours && base && theirs &&
             (await ours.type()) === 'blob' &&
             (await base.type()) === 'blob' &&
@@ -210,15 +212,20 @@ async function mergeBlobs({
     ourContent: Buffer.from(await ours.content()).toString('utf8'),
     baseContent: Buffer.from(await base.content()).toString('utf8'),
     theirContent: Buffer.from(await theirs.content()).toString('utf8'),
-    ourName, theirName, baseName, format, markerSize,
+    ourName, theirName, baseName, format, markerSize, filepath
   }
 
+  /**
+   * @type {GitMergeResultItemMeta}
+   */
   let mergeResult
-  // TODO: 如果是meta文件冲突，使用mergeNoteMeta来解决冲突
-  if (/^meta\//.test(filepath)) {
+  if (/^meta\//.test(filepath)) {               // meta
     mergeResult = mergeNoteMeta(mergeOption)
-  } else {
-    // if both sides made changes do a merge
+  } else if (/^folder$/.test(filepath)) {       // folder
+    mergeResult = mergeFolder(mergeOption)
+  } else if (/^notes\/n/.test(filepath)) {
+    mergeResult = mergeNote(mergeOption)
+  } else {        // 其他
     mergeResult = mergeFile(mergeOption)
   }
 
@@ -234,5 +241,18 @@ async function mergeBlobs({
     object: Buffer.from(mergeResult.mergedText, 'utf8'),
     dryRun,
   })
-  return { mode, path, oid, type }
+
+  /**
+   * @typedef {{mode: number, path: string, oid: *, type: string, conflict: [string, string]}} GitMergeResultItem
+   */
+
+  /**
+   * @type {GitMergeResultItem}
+   */
+  const result = { mode, path, oid, type }
+  if (mergeResult.conflict) {
+    result.conflict = mergeResult.conflict
+  }
+
+  return result
 }

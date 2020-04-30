@@ -141,6 +141,8 @@ exports.fetch = async function(gitPath, localPath, username, password) {
  */
 exports.merge = async function(localPath, theirs, ours = 'master') {
   // fastForward 可以少记录，还不用提用户名
+  // TODO: 51来了才能继续写了
+  // 注意：merge之前必须要先commit！如果没有经过commit，是不可能merge的时候冲突的
   const option = {
     fs,
     dir: localPath,
