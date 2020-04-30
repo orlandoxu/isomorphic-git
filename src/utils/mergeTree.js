@@ -10,6 +10,7 @@ import { _writeObject as writeObject } from '../storage/writeObject.js'
 import { basename } from './basename.js'
 import { join } from './join.js'
 import { mergeFile } from './mergeFile.js'
+import { mergeNoteMeta } from './mergeNoteMeta.js'
 
 /**
  * Create a merged tree
@@ -56,7 +57,7 @@ export async function mergeTree({
       const ourChange = await modified(ours, base)
       const theirChange = await modified(theirs, base)
       switch (`${ourChange}-${theirChange}`) {
-        case 'false-false': {
+        case 'false-false': {     // 双方都未改动
           return {
             mode: await base.mode(),
             path,
@@ -64,7 +65,7 @@ export async function mergeTree({
             type: await base.type(),
           }
         }
-        case 'false-true': {
+        case 'false-true': {      // theirs改变了
           return theirs
             ? {
                 mode: await theirs.mode(),
@@ -74,7 +75,7 @@ export async function mergeTree({
               }
             : undefined
         }
-        case 'true-false': {
+        case 'true-false': {      // theirs改变了
           return ours
             ? {
                 mode: await ours.mode(),
@@ -85,11 +86,9 @@ export async function mergeTree({
             : undefined
         }
         case 'true-true': {
+
           // Modifications
-          if (
-            ours &&
-            base &&
-            theirs &&
+          if ( ours && base && theirs &&
             (await ours.type()) === 'blob' &&
             (await base.type()) === 'blob' &&
             (await theirs.type()) === 'blob'
@@ -98,6 +97,7 @@ export async function mergeTree({
               fs,
               gitdir,
               path,
+              filepath,
               ours,
               base,
               theirs,
@@ -180,60 +180,58 @@ async function modified(entry, base) {
  * @param {string} [args.format]
  * @param {number} [args.markerSize]
  * @param {boolean} [args.dryRun = false]
- *
+ * @param {string} [args.filepath = '']
  */
 async function mergeBlobs({
-  fs,
-  gitdir,
-  path,
-  ours,
-  base,
-  theirs,
-  ourName,
-  theirName,
-  baseName,
-  format,
-  markerSize,
-  dryRun,
+  fs, gitdir, path, ours, base, theirs,
+  ourName, theirName, baseName, format, markerSize,
+  dryRun, filepath
 }) {
   const type = 'blob'
   // Compute the new mode.
   // Since there are ONLY two valid blob modes ('100755' and '100644') it boils down to this
-  const mode =
-    (await base.mode()) === (await ours.mode())
-      ? await theirs.mode()
-      : await ours.mode()
+  const mode = (await base.mode()) === (await ours.mode()) ? await theirs.mode() : await ours.mode()
+
   // The trivial case: nothing to merge except maybe mode
   if ((await ours.oid()) === (await theirs.oid())) {
     return { mode, path, oid: await ours.oid(), type }
   }
+
   // if only one side made oid changes, return that side's oid
   if ((await ours.oid()) === (await base.oid())) {
     return { mode, path, oid: await theirs.oid(), type }
   }
+
   if ((await theirs.oid()) === (await base.oid())) {
     return { mode, path, oid: await ours.oid(), type }
   }
-  // if both sides made changes do a merge
-  const { mergedText, cleanMerge } = mergeFile({
+
+  const mergeOption = {
     ourContent: Buffer.from(await ours.content()).toString('utf8'),
     baseContent: Buffer.from(await base.content()).toString('utf8'),
     theirContent: Buffer.from(await theirs.content()).toString('utf8'),
-    ourName,
-    theirName,
-    baseName,
-    format,
-    markerSize,
-  })
-  if (!cleanMerge) {
+    ourName, theirName, baseName, format, markerSize,
+  }
+
+  let mergeResult
+  // TODO: 如果是meta文件冲突，使用mergeNoteMeta来解决冲突
+  if (/^meta\//.test(filepath)) {
+    mergeResult = mergeNoteMeta(mergeOption)
+  } else {
+    // if both sides made changes do a merge
+    mergeResult = mergeFile(mergeOption)
+  }
+
+  if (!mergeResult.cleanMerge) {
     // all other types of conflicts fail
     throw new MergeNotSupportedError()
   }
+
   const oid = await writeObject({
     fs,
     gitdir,
     type: 'blob',
-    object: Buffer.from(mergedText, 'utf8'),
+    object: Buffer.from(mergeResult.mergedText, 'utf8'),
     dryRun,
   })
   return { mode, path, oid, type }

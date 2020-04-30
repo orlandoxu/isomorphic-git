@@ -1,6 +1,6 @@
 'use strict'
 
-// const fs = require('fs')
+const fs = require('fs')
 // const http = require('../src/http/node')
 // const git = require('../src/index')
 
@@ -75,6 +75,7 @@ async function mergeTest() {
     '3OOioYZ7SO34kHmU',
     '3its45tmONC0jkAc'
   )
+
   const mergeResult = await gitHelper.merge(localPath, f.fetchHead).catch(err => {
     console.log(err)
   })

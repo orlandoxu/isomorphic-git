@@ -119,9 +119,9 @@ export async function _merge({
   }
 
   // case 3 需要合并分支
-  if (fastForwardOnly) {
-    throw new FastForwardError()
-  }
+  // if (fastForwardOnly) {
+  //   throw new FastForwardError()
+  // }
 
   const tree = await mergeTree({
     fs,
